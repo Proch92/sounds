@@ -4,7 +4,8 @@ export train_gan, plot_syntethic, newmodel, savemodel, loadmodel
 
 using MLDatasets
 using Flux
-using Flux: Losses.binarycrossentropy, throttle
+using Flux: Losses.logitbinarycrossentropy, throttle
+using Zygote
 # using Flux.Optimise: train!, update!
 using Plots
 using ProgressMeter
@@ -54,80 +55,38 @@ function noise(m)
     return randn(100, m)
 end
 
+function lossdisc(real, fake)
+    real_loss = mean(logitbinarycrossentropy.(real, 1f0))
+    fake_loss = mean(logitbinarycrossentropy.(fake, 0f0))
+    return real_loss + fake_loss
+end
+
+lossgen(fake) = mean(logitbinarycrossentropy.(model.discriminator(fake), 1f0))
+
 function train_discriminator(model, opt, real, batchsize)
-	targetreal = ones(batchsize)
-	targetfake = zeros(batchsize)
 	fake = model.generator(noise(batchsize))
-	# loss(x, y) = binarycrossentropy(model.discriminator(x), y)
 
-	# println(size(real))
-	# println(size(fake))
-	# preds = model.discriminator(real)
-	# println(size(preds))
-	
-	# preds = model.discriminator(real)
-	# loglossreal() = @info "discloss_real" binarycrossentropy(preds, targetreal)
-	# data = zip(preds, targetreal)
-	# train!(
-	# 	binarycrossentropy,
-	# 	params(model.discriminator),
-	# 	data,
-	# 	opt,
-	# 	cb=throttle(loglossreal, 5)
-	# )
-
-	# preds = model.discriminator(fake)
-	# loglossfake() = @info "discloss_fake" binarycrossentropy(preds, targetfake)
-	# data = zip(preds, targetfake)
-	# train!(
-	# 	binarycrossentropy,
-	# 	params(model.discriminator),
-	# 	data,
-	# 	opt,
-	# 	cb=throttle(loglossfake, 5)
-	# )
-
-	loss(x, y) = binarycrossentropy(model.discriminator(x), y)
 	Θ = params(model.discriminator)
+
+	loss, back = Flux.pullback(Θ) do
+        lossdisc(model.discriminator(real), model.discriminator(fake))
+    end
 	
-	grads = gradient(() -> loss(real, targetreal), Θ)
-	for p in Θ
-		Flux.Optimise.update!(opt, p, grads[p])
-	end
+	Flux.Optimise.update!(opt, Θ, back(1f0))
 
-	grads = gradient(() -> loss(fake, targetfake), Θ)
-	for p in Θ
-		Flux.Optimise.update!(opt, p, grads[p])
-	end
-
-	@info "discloss_real" loss(real, targetreal)
-	@info "discloss_fake" loss(fake, targetfake)
+	@info "discloss" loss
 end
 
 function train_generator(model, opt, batchsize)
-	target = ones(batchsize)
-	# loss(x, y) = binarycrossentropy(model.discriminator(x), y)
-
-	# preds = model.discriminator(fake)
-	# loglossgen() = @info "genloss" binarycrossentropy(preds, target)
-	# data = zip(preds, target)
-	# train!(
-	# 	binarycrossentropy,
-	# 	params(model.generator),
-	# 	data,
-	# 	opt,
-	# 	cb=throttle(loglossgen, 5)
-	# )
-
-	loss(x, y) = binarycrossentropy(model.discriminator(x), y)
 	Θ = params(model.generator)
 	
-	grads = gradient(() -> loss(model.generator(noise(batchsize)), target), Θ)
-	for p in Θ
-		Flux.Optimise.update!(opt, p, grads[p])
-	end
+	loss, back = Flux.pullback(Θ) do
+        lossgen(model.discriminator(model.generator(noise(batchsize))))
+    end
+	
+	Flux.Optimise.update!(opt, Θ, back(1f0))
 
-	@info "genloss" loss(model.generator(noise(batchsize)), target)
+	@info "genloss" loss
 end
 
 function train_gan(model, tensors, epochs, batchsize=64)
