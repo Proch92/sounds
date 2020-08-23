@@ -6,6 +6,7 @@ using MLDatasets
 using Flux
 using Flux: Losses.logitbinarycrossentropy, throttle
 using Zygote
+using Statistics
 # using Flux.Optimise: train!, update!
 using Plots
 using ProgressMeter
@@ -48,7 +49,7 @@ function loadmodel()
 end
 
 function newmodel()
-    return Model(Discriminator(), Generator())
+    return Model(Discriminator() |> gpu, Generator() |> gpu)
 end
 
 function noise(m)
@@ -61,10 +62,10 @@ function lossdisc(real, fake)
     return real_loss + fake_loss
 end
 
-lossgen(fake) = mean(logitbinarycrossentropy.(model.discriminator(fake), 1f0))
+lossgen(fake) = mean(logitbinarycrossentropy.(fake, 1f0))
 
 function train_discriminator(model, opt, real, batchsize)
-	fake = model.generator(noise(batchsize))
+	fake = model.generator(noise(batchsize) |> gpu)
 
 	Θ = params(model.discriminator)
 
@@ -81,7 +82,7 @@ function train_generator(model, opt, batchsize)
 	Θ = params(model.generator)
 	
 	loss, back = Flux.pullback(Θ) do
-        lossgen(model.discriminator(model.generator(noise(batchsize))))
+        lossgen(model.discriminator(model.generator(noise(batchsize) |> gpu)))
     end
 	
 	Flux.Optimise.update!(opt, Θ, back(1f0))

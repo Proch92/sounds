@@ -7,12 +7,12 @@ import .Gan
 
 
 function main()
-	train_x, train_y = MNIST.traindata()
-	test_x,  test_y  = MNIST.testdata()
+	train_x, train_y = MNIST.traindata(Float32)
+	test_x,  test_y  = MNIST.testdata(Float32)
 	tensors = cat(train_x, test_x, dims=3)
 	tensors = reshape(tensors, (28*28, size(tensors)[3]))
-	tensors = Float32.(tensors)
-	tensors = ((tensors ./ 255) .* 2) .- 1
+	tensors = @.(2f0 * tensors - 1f0)
+	tensors = tensors |> gpu
 
 	println(size(tensors))
 
