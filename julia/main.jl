@@ -1,4 +1,3 @@
-using ProfileView
 using MLDatasets
 using Flux
 using Statistics
