@@ -109,7 +109,8 @@ function plot_syntethic(model, m=9)
 	images = reshape(images, (28, 28, m))
 	images = [images[:,:,i] for i in 1:m]
 	imgplots = plot.(images[1:m])
-	plot(imgplots...)
+	gridplot = plot(imgplots...)
+	savefig(gridplot, "out.png")
 end
 
 end
